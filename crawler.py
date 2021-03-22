@@ -1,23 +1,27 @@
-#coding=UTF-8
+# coding=UTF-8
+
 # ----安裝套件----
-#pip install openpyxl
-#pip install googletrans
-#pip install BeautifulSoup4
-#pip install textblob
-#pip install pandas
-#pip install opencc-python-reimplemented
-#pip install requests
-#pip install google-cloud-translate==1.7.0
-#pip install --upgrade google-cloud-translate
-#pip install --upgrade google-cloud-storage
+# pip install openpyxl
+# pip install googletrans
+# pip install BeautifulSoup4
+# pip install textblob
+# pip install pandas
+# pip install opencc-python-reimplemented
+# pip install requests
+# pip install google-cloud-translate==1.7.0
+# pip install google-cloud-translate==2.0.0
+# pip install --upgrade google-cloud-translate
+# pip install --upgrade google-cloud-storage
 
 import requests
 
 import os
+import os.path
 import requests
 import math
 import pandas as pd
 import logging
+
 from pprint import pprint
 from bs4 import BeautifulSoup
 from opencc import OpenCC
@@ -25,8 +29,8 @@ from threading import current_thread
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from google.cloud import translate_v2
 
-os.environ[
-    'GOOGLE_APPLICATION_CREDENTIALS'] = r"C:\Users\user\Desktop\python-crawler\translate.json"
+keyPath = os.path.abspath('.') + '/translate.json'
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = keyPath
 translate_client = translate_v2.Client()
 
 FORMAT = '%(asctime)s %(levelname)s: %(message)s'
@@ -45,11 +49,24 @@ productsInStockList = []
 productImageUrlList1 = []
 #productImageUrlList2 = []
 #productImageUrlList3 = []
+productNumberList = []
 
 productImageUrlDic = {}
 for i in range(2, 4):
     productImageUrlLists = []
     productImageUrlDic["圖片" + str(i)] = productImageUrlLists
+
+
+# parsing productModel
+def parseProductModel(check_str):
+    res = ''
+    for ch in check_str:
+        if u'\u4e00' <= ch <= u'\u9fff':
+            break
+
+        else:
+            res += ch
+    return res
 
 
 # translate jp to chinese
@@ -89,17 +106,17 @@ def parseProductDetail(productLink, picFlag):
             'user-agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36'
         }
-        #for i in range(start, productPage):
+        # for i in range(start, productPage):
         response = requests.get(productLink, headers=headers)
         if str(response.status_code) == '200':
-            print("開始執行爬蟲: " + productLink)
+            print("start crawler : " + productLink)
             soup = BeautifulSoup(response.text, "html.parser")
             for product in soup.find_all(["li", "a"]):
                 productLink = str(product.get('href'))
                 if productLink.find(
                         'https://fakiki.com/products/detail/') >= 0:
 
-                    #start parsing #品名
+                    # start parsing #品名
                     try:
                         productName = product.find('h2').string
                         productName = googleTranslateApi(productName)
@@ -108,7 +125,7 @@ def parseProductDetail(productLink, picFlag):
                         print("parsing productName fail...")
                         logging.error("parsing productName fail...")
 
-                    #start parsing #圖片
+                    # start parsing #圖片
                     try:
                         if product.find('img').get("src") != None:
                             productImageUrl1 = 'https://fakiki.com' + product.find(
@@ -131,12 +148,12 @@ def parseProductDetail(productLink, picFlag):
                                 productImageUrlDic['圖片' +
                                                    str(picIndex)].append(
                                                        productUrlLink)
-                            #print(productImageUrlDic)
+                            # print(productImageUrlDic)
                     except:
                         print("parsing picture fail...")
                         logging.error("parsing picture fail...")
 
-                    #start parsing #狀態
+                    # start parsing #狀態
                     try:
                         productStatus = product.find(
                             "ul", class_="state").select('li')[0].select(
@@ -148,7 +165,17 @@ def parseProductDetail(productLink, picFlag):
                     finally:
                         productStatusList.append(productStatus)
 
-                    #start parsing #庫存
+                    # start parsing #物品代碼
+                    try:
+                        productNumber = str(
+                            product.find_all('p')[0].get_text()).split(
+                                ":")[1].lstrip().rstrip()
+                        productNumberList.append(productNumber)
+                    except:
+                        print("parsing productNumber fail...")
+                        logging.error("parsing productNumber fail...")
+
+                    # start parsing #庫存
                     try:
                         productStock = str(
                             product.find_all('p')[1].select('span')
@@ -158,20 +185,22 @@ def parseProductDetail(productLink, picFlag):
                         print("parsing productStock fail...")
                         logging.error("parsing productStock fail...")
 
-                    #start parsing #價格
+                    # start parsing #價格
                     try:
                         productPrice = str(
                             product.find("p",
                                          class_="price").string).split(":")[1]
                         productPrice = productPrice[:productPrice.find('円')]
+                        productPrice = productPrice.replace(",", '')
                         productPriceList.append(productPrice)
                     except:
                         print("parsing productPrice fail...")
                         logging.error("parsing productPrice fail...")
 
-                    #start parsing #品名
+                    # start parsing #品名
                     try:
                         productModel = productName
+                        '''
                         if productModel.find("  ") >= 0:
                             productModel = productModel.split("  ")[0]
                         if productModel.find(" ") >= 0:
@@ -188,22 +217,25 @@ def parseProductDetail(productLink, picFlag):
                             for s in productModel:
                                 if s.isdigit() == True or s.find(
                                         "-") >= 0 or s.encode('UTF-8').isalpha(
-                                        ) == True or s.find(" ") >= 0:
+                                ) == True or s.find(" ") >= 0:
                                     model = model + s
                                 else:
                                     break
                             productModel = model
+                        '''
+                        productModel = parseProductModel(str(productModel))
+                        # print(productModel)
                         productModelList.append(productModel)
                     except:
                         print("parsing productModel fail...")
                         logging.error("parsing productModel fail...")
 
-                    #print(productModel)
-                    #print(productPrice).rstrip()
-                    #print(productStock)
-                    #print(productName)
-                    #print(productImageUrl1)
-                    #print(productStatus)
+                    # print(productModel)
+                    # print(productPrice).rstrip()
+                    # print(productStock)
+                    # print(productName)
+                    # print(productImageUrl1)
+                    # print(productStatus)
             print("crawling product URL success: " + productLink)
             logging.info("crawling product URL success: " + productLink)
         else:
@@ -216,6 +248,7 @@ def parseProductDetail(productLink, picFlag):
 
 
 def dataToExcel():
+    productNameListLen = len(productNameList)
     productModelListLen = len(productModelList)
     productNameListLen = len(productNameList)
     productPriceListLen = len(productPriceList)
@@ -225,22 +258,23 @@ def dataToExcel():
     #productImageUrlList2Len = len(productImageUrlList2)
     #productImageUrlList3Len = len(productImageUrlList3)
 
-    if productModelListLen == productNameListLen == productPriceListLen == productStatusListLen == productsInStockListLen == productImageUrlList1Len:
-        #== productImageUrlList2Len == productImageUrlList3Len:
+    if productNameListLen == productModelListLen == productNameListLen == productPriceListLen == productStatusListLen == productsInStockListLen == productImageUrlList1Len:
+        # == productImageUrlList2Len == productImageUrlList3Len:
         resDic = dict({
+            '物品代碼': productNumberList,
             '型號': productModelList,
             '品名': productNameList,
             '價格': productPriceList,
             '品況': productStatusList,
             '庫存數量': productsInStockList,
             '圖片1': productImageUrlList1
-            #'圖片2': productImageUrlList2,
-            #'圖片3': productImageUrlList3
+            # '圖片2': productImageUrlList2,
+            # '圖片3': productImageUrlList3
         })
         for key, value in productImageUrlDic.items():
             #print(key, value)
             resDic[key] = productImageUrlDic[key]
-        #print(resDic)
+        # print(resDic)
 
         df_marks = pd.DataFrame(resDic)
         writer = pd.ExcelWriter('output.xlsx')
@@ -259,17 +293,18 @@ def main():
         print("total page : ", productPage)
 
         picFlag = False
-        start = 151  #start page
-        productPage = 199  #end page
+        start = 1  # start page
+        productPage = 50  # end page
         productUrlList = setCrawlerPages(start, productPage)
         pool = ThreadPoolExecutor(100)
         for url in productUrlList:
             pool.submit(parseProductDetail, url, picFlag)
-            #print(url)
+            # print(url)
 
         pool.shutdown(wait=True)
         #parseProductDetail(0, 1)
 
+        print("：productNumberList :", len(productNumberList))
         print("productModelList :", len(productModelList))
         print("productNameList :", len(productNameList))
         print("productPriceList :", len(productPriceList))
